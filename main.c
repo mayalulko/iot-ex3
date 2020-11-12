@@ -1,49 +1,10 @@
 #include <string.h>
 #include <stdio.h>
-#include <time.h>
-#include "wolfmqtt/mqtt_socket.h"
-#include "wolfmqtt/mqtt_packet.h"
-#include "MQTTClient.h"
-#include "sharedParameters.h"
+#include "serial_io.h"
+#include "config.h"
 
-#define DEFAULT_KEEP_ALIVE_SEC 60
-static const char *const TOPIC_NAME = "huji_iot_class/2020_2021";
 byte TX_BUFFER[BUFFER_SIZE] = {0};
 byte RX_BUFFER[BUFFER_SIZE] = {0};
-
-
-/**
- * Initializes MqttCtx struct
- * @param mqttCtx Context
- */
-static void initMqttCtx(MQTTCtx* mqttCtx);
-
-/**
- * Initializes MqttClient struct of MqttCtx
- * @param mqttCtx Context
- * @return
- */
-static int initClient(MQTTCtx* mqttCtx);
-
-/**
- * Initializes CONNECT packet
- * @param mqttCtx Context
- */
-static void initConnectPacket(MQTTCtx *mqttCtx);
-
-/**
- * Connects to broker
- * @param mqttCtx Context
- * @return
- */
-static int connectToBroker(MQTTCtx* mqttCtx);
-
-/**
- * PUBLISHes a message
- * @param mqttCtx Context
- * @return
- */
-static int publishMessage(MQTTCtx* mqttCtx);
 
 
 int main(){
