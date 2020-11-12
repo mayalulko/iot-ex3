@@ -12,6 +12,8 @@
 
 #define MODEM_BAUD_RATE B115200
 
+#define MAX_NUMBER_ATTEMPTS 30
+
 #define ENDL "\r\n"
 
 #endif //IOT_EX3_CONFIG_H

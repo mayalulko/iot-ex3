@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include "serial_io.h"
 #include "config.h"
-
+#include "time.h"
+#include <unistd.h>
 
 char TX_BUFFER[BUFFER_SIZE] = {0};
 unsigned char RX_BUFFER[BUFFER_SIZE] = {0};
@@ -12,6 +13,7 @@ unsigned char* AT_CCID = "AT+CCID";
 unsigned char* AT_COPS_ALL = "AT+COPS=?";
 unsigned char* AT_COPS = "AT+COPS?";
 unsigned char* AT_CREG = "AT+CREG?";
+char* PBREADY = "+PBREADY";
 
 /**
  *
@@ -38,13 +40,20 @@ int main() {
  * TODO: turn off the echo - this will affect the parsing -don't want that
  */
     int retval = SerialInit(MODEM_PORT, MODEM_BAUD_RATE);
+
     printf("%d \n", retval);
     printf("Connecting...\n");
-//    retval = SerialRecv((unsigned char*)RX_BUFFER, BUFFER_SIZE,15000);
-//    printf("after 1st rcv %d \n", retval);
-//    RX_BUFFER[retval] = '\0';
-//    printf("%s\n", RX_BUFFER);
-//    SerialFlushInputBuff();
+    retval = SerialRecv((unsigned char*)RX_BUFFER, BUFFER_SIZE,15000);
+    printf("after 1st rcv %d \n", retval);
+    RX_BUFFER[retval] = '\0';
+    printf("%s\n", RX_BUFFER);
+    SerialFlushInputBuff();
+    char* pbrdy = strstr(RX_BUFFER, PBREADY);
+    if (pbrdy == NULL) {
+        printf("no luck");
+        SerialDisable();
+        return -1;
+    }
 
     writeAndRead("ATE0", 4, RX_BUFFER, BUFFER_SIZE, 500);
     memset(RX_BUFFER, 0, sizeof(char));
@@ -52,7 +61,20 @@ int main() {
     memset(RX_BUFFER, 0, sizeof(char));
     writeAndRead(AT_CCID, strlen(AT_CCID), RX_BUFFER, BUFFER_SIZE, 500);
     memset(RX_BUFFER, 0, sizeof(char));
-    writeAndRead(AT_CREG, strlen(AT_CREG), RX_BUFFER, BUFFER_SIZE, 500);
+    int attempts = 0;
+    do {
+        writeAndRead(AT_CREG, strlen(AT_CREG), RX_BUFFER, BUFFER_SIZE, 500);
+        if (strstr(RX_BUFFER, "0,5") != NULL)
+            break;
+        ++attempts;
+        if (attempts == MAX_NUMBER_ATTEMPTS) {
+            SerialDisable();
+            return -1;
+        }
+
+        sleep(5);
+    } while(attempts < MAX_NUMBER_ATTEMPTS);
+
     memset(RX_BUFFER, 0, sizeof(char));
     writeAndRead(AT_COPS, strlen(AT_COPS), RX_BUFFER, BUFFER_SIZE, 500);
     memset(RX_BUFFER, 0, sizeof(char));
