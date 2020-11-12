@@ -7,6 +7,7 @@
 
 int fd;
 
+
 /**
  * @brief Initialises the serial connection.
  * @param port - the port to connected to. e.g: /dev/ttyUSB0, /dev/ttyS1 for Linux and COM8, COM10, COM53 for Windows.
@@ -43,10 +44,15 @@ int SerialInit(char* port, unsigned int baud) {
  * @return amount of bytes read into buf, -1 on error.
 */
 int SerialRecv(unsigned char *buf, unsigned int max_len, unsigned int timeout_ms) {
-    SerialPortSettings.c_cc[VMIN] = 0; // TODO:: check if this is ok and shouldn't be bigger
-    SerialPortSettings.c_cc[VTIME] = timeout_ms * 1e-2; // deciseconds
+    struct termios SerialPortSettings;
+    tcgetattr(fd, &SerialPortSettings);
 
-    bytes_read = read(fd, &buf, max_len);
+    SerialPortSettings.c_cc[VMIN] = 30; // TODO:: check if this is ok and shouldn't be bigger
+    SerialPortSettings.c_cc[VTIME] = timeout_ms * 0.01; // deciseconds
+//    SerialPortSettings.c_cflag |= CREAD | CLOCAL;
+    tcsetattr(fd, TCSANOW, &SerialPortSettings); // config!!
+
+    int bytes_read = read(fd, buf, max_len);
     if (bytes_read < 0) {
         return -1;
     }
@@ -61,7 +67,7 @@ int SerialRecv(unsigned char *buf, unsigned int max_len, unsigned int timeout_ms
  */
 int SerialSend(unsigned char *buf, unsigned int size) {
     int writeval = write(fd, buf, size);
-    if (writeval < size) {
+    if (writeval < (int)size) {
         return -1;
     }
     return writeval;
@@ -72,7 +78,10 @@ int SerialSend(unsigned char *buf, unsigned int size) {
  * @brief Empties the input buffer.
  */
 void SerialFlushInputBuff(void) {
-    tcflush(fd, TCIFLUSH);
+    int tf = tcflush(fd, TCIFLUSH);
+    if (tf < 0) {
+        return;
+    }
 }
 
 /**
@@ -80,7 +89,7 @@ void SerialFlushInputBuff(void) {
  * @return 0 if succeeded in closing the port and -1 otherwise.
  */
 int SerialDisable(void) {
-    close(fd);
+    return close(fd);
 }
 
 
