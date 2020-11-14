@@ -14,17 +14,27 @@ unsigned char* AT_COPS_ALL = "AT+COPS=?";
 unsigned char* AT_COPS = "AT+COPS?";
 unsigned char* AT_CREG = "AT+CREG?";
 char* PBREADY = "+PBREADY";
+char* OK = "OK";
+char* HAS_CONNECTION = "0,5";
 
 /**
  *
  * @param command
  * @param commandSize
+ * @return
+ */
+int writeCommand(unsigned char* command, int commandSize);
+
+/**
+ *
  * @param buf
  * @param bufsize
  * @param timeout
+ * @param endMsg
+ * @param maxNumAttempts
  * @return
  */
-int writeAndRead(unsigned char* command, int commandSize, unsigned char* buf, int bufsize, int timeout);
+int readUntil(unsigned char* buf, int bufsize, int timeout, char* endMsg, int maxNumAttempts);
 
 
 int main() {
@@ -39,47 +49,84 @@ int main() {
  * print the command and response
  * TODO: turn off the echo - this will affect the parsing -don't want that
  */
+    printf("Initializing... \n");
     int retval = SerialInit(MODEM_PORT, MODEM_BAUD_RATE);
-
-    printf("%d \n", retval);
-    printf("Connecting...\n");
-    retval = SerialRecv((unsigned char*)RX_BUFFER, BUFFER_SIZE,15000);
-    printf("after 1st rcv %d \n", retval);
-    RX_BUFFER[retval] = '\0';
-    printf("%s\n", RX_BUFFER);
-    SerialFlushInputBuff();
-    char* pbrdy = strstr(RX_BUFFER, PBREADY);
-    if (pbrdy == NULL) {
-        printf("no luck");
-        SerialDisable();
+    if (retval < 0) {
+        // TODO:: errmsg
         return -1;
     }
+    //printf("%d \n", retval);
+    printf("Connecting...\n");
+    /*
+//    SerialRecv((unsigned char*)RX_BUFFER, BUFFER_SIZE,15000);
+    retval = readUntil(RX_BUFFER, BUFFER_SIZE, 15000, PBREADY, MAX_NUMBER_ATTEMPTS);
+    if (retval < 0) {
+        SerialDisable();
+        //TODO:: errmsg
+        return -1;
+    }
+    printf("Waiting for pbready.\n Received number of bytes: %d \n", retval);
+    memset(RX_BUFFER, 0, sBUFFER_SIZE;
+    */
 
-    writeAndRead("ATE0", 4, RX_BUFFER, BUFFER_SIZE, 500);
-    memset(RX_BUFFER, 0, sizeof(char));
-    writeAndRead(AT, strlen(AT), RX_BUFFER, BUFFER_SIZE, 500);
-    memset(RX_BUFFER, 0, sizeof(char));
-    writeAndRead(AT_CCID, strlen(AT_CCID), RX_BUFFER, BUFFER_SIZE, 500);
-    memset(RX_BUFFER, 0, sizeof(char));
-    int attempts = 0;
-    do {
-        writeAndRead(AT_CREG, strlen(AT_CREG), RX_BUFFER, BUFFER_SIZE, 500);
-        if (strstr(RX_BUFFER, "0,5") != NULL)
+    //writeCommand("ATE0", 4, RX_BUFFER, BUFFER_SIZE, 500);
+    //memset(RX_BUFFER, 0, sBUFFER_SIZE;
+    /* AT command */
+    printf("sending AT command\n");
+    writeCommand(AT, strlen(AT));
+    printf("Receiving response to AT command\n");
+    readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
+
+    /* AT+CCID? command */
+    printf("sending AT+CCID? command\n");
+    writeCommand(AT_CCID, strlen(AT_CCID)); // TODO check that ccid's length is ok
+    printf("Receiving response to AT+CCID? command\n");
+    retval = readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
+    if (retval < 0) {
+        SerialDisable();
+        //TODO:: errmsg
+        return -1;
+    }
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
+
+
+//    writeCommand(AT_CREG, strlen(AT_CREG));
+//    readUntil(RX_BUFFER, BUFFER_SIZE, 500, )
+
+    int connectAttempts = 0;
+    while(connectAttempts < MAX_NUMBER_ATTEMPTS) {
+        printf("sending AT+CREG? command, attempt %d\n", connectAttempts);
+        writeCommand(AT_CREG, strlen(AT_CREG));
+        printf("Receiving response to AT+CREG? command\n");
+        int bytes = readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
+        if ((bytes > 0) && (strstr(RX_BUFFER, HAS_CONNECTION)!=NULL)) {
             break;
-        ++attempts;
-        if (attempts == MAX_NUMBER_ATTEMPTS) {
+        }
+        memset(RX_BUFFER, 0, BUFFER_SIZE);
+        ++connectAttempts;
+        if (connectAttempts == MAX_NUMBER_ATTEMPTS) {
             SerialDisable();
             return -1;
         }
 
         sleep(5);
-    } while(attempts < MAX_NUMBER_ATTEMPTS);
+    }
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
 
-    memset(RX_BUFFER, 0, sizeof(char));
-    writeAndRead(AT_COPS, strlen(AT_COPS), RX_BUFFER, BUFFER_SIZE, 500);
-    memset(RX_BUFFER, 0, sizeof(char));
-    writeAndRead(AT_COPS_ALL, strlen(AT_COPS_ALL), RX_BUFFER, BUFFER_SIZE, 18e4);
-    memset(RX_BUFFER, 0, sizeof(char));
+    /* AT+COPS? command */
+    printf("sending AT+COPS? command\n");
+    writeCommand(AT_COPS, strlen(AT_COPS));
+    printf("Receiving response to AT+COPS? command\n");
+    readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
+
+    /* AT+COPS=? command */
+    printf("sending AT+COPS=? command\n");
+    writeCommand(AT_COPS_ALL, strlen(AT_COPS_ALL));
+    printf("Receiving response to AT+COPS=? command\n");
+    readUntil(RX_BUFFER, BUFFER_SIZE, 18e4, OK, MAX_NUMBER_ATTEMPTS);
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
     printf("yeah!\n");
 
 
@@ -87,23 +134,48 @@ int main() {
     printf("DISABLE %d \n", disval);
 }
 
-int writeAndRead(unsigned char* command, int commandSize, unsigned char* buf, int bufsize, int timeout) {
+int writeCommand(unsigned char* command, int commandSize) {
     // Write command
     int commandSize_fmt = commandSize+strlen(ENDL);
     snprintf(TX_BUFFER,commandSize_fmt+1, "%s%s%c", command, ENDL, '\0');
     int bytesSent = SerialSend((unsigned char*)TX_BUFFER, commandSize_fmt);
     printf("sent bytes %d \n", bytesSent);
     TX_BUFFER[0]='\0';
+    return bytesSent;
+}
 
+int readUntil(unsigned char* buf, int bufsize, int timeout, char* endMsg, int maxNumAttempts){
     // Receive answer
-    int bytesRcv = SerialRecv((unsigned char*)buf, bufsize, timeout);
-    printf("bytes received %d \n", bytesRcv);
 
-    buf[bytesRcv] = '\0';
-    printf("Received message: %s \n", buf);
+    int bytesRecv = 0;
+    int bufferReadSoFar = 0;
+    int attemps = 0;
+    unsigned char* curLocation = NULL;
+    curLocation = buf;
+
+    // TODO: timeout proportional to attempts.
+    int found = 0;
+    while ((attemps < maxNumAttempts) && (bufferReadSoFar < bufsize)) {
+        printf("In read. attempt: %d.\n", attemps);
+        bytesRecv = SerialRecv(curLocation, bufsize-bufferReadSoFar, timeout);
+        bufferReadSoFar += bytesRecv;
+        if (strstr(buf, endMsg)!=NULL) {
+            found = 1;
+            break;
+        }
+        curLocation += bytesRecv;
+        attemps++;
+    }
+    buf[bufferReadSoFar] = '\0';
+    printf("Received message:\n %s ", buf);
+
+    if (!found){
+        return -1;
+        printf("error"); // TODO error msg
+    }
+
 
     SerialFlushInputBuff();
-
-    return bytesRcv;
-
+    printf("Number of bytes read: %d\n", bufferReadSoFar);
+    return bufferReadSoFar;
 }

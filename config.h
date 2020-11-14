@@ -12,7 +12,7 @@
 
 #define MODEM_BAUD_RATE B115200
 
-#define MAX_NUMBER_ATTEMPTS 30
+#define MAX_NUMBER_ATTEMPTS 15
 
 #define ENDL "\r\n"
 

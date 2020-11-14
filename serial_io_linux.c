@@ -47,7 +47,7 @@ int SerialRecv(unsigned char *buf, unsigned int max_len, unsigned int timeout_ms
     struct termios SerialPortSettings;
     tcgetattr(fd, &SerialPortSettings);
 
-    SerialPortSettings.c_cc[VMIN] = 30; // TODO:: check if this is ok and shouldn't be bigger
+    SerialPortSettings.c_cc[VMIN] = 15; // TODO:: check if this is ok and shouldn't be bigger
     SerialPortSettings.c_cc[VTIME] = timeout_ms * 0.01; // deciseconds
 //    SerialPortSettings.c_cflag |= CREAD | CLOCAL;
     tcsetattr(fd, TCSANOW, &SerialPortSettings); // config!!
