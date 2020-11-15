@@ -79,7 +79,7 @@ int main() {
         fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
     }
 
-    cmd = "AT+CCID?";
+    cmd = "AT+CCID";
     printf("4) Sending `%s` command and reading output\n", cmd);
     retval = execSimpleModemCommand(cmd, 500);
     if (retval == ERROR) {
