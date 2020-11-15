@@ -10,8 +10,6 @@ Maya Lulko maya.lulko@mail.huji.ac.il , 312414089
 * config.h - parameters configuration file
 * Makefile
 * README.md
-* socket.h - contract for creating a TCP socket, with read/write functionality
-* socket_linux.c - implementation of socket.h with BSD sockets
 
 ## Build instructions
 ### Requirements
