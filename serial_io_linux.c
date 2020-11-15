@@ -4,9 +4,7 @@
 #include "unistd.h"
 #include "config.h"
 
-
-int fd;
-
+static int serialFd;
 
 /**
  * @brief Initialises the serial connection.
@@ -15,12 +13,13 @@ int fd;
  * @return 0 if succeeded in opening the port and -1 otherwise.
  */
 int SerialInit(char* port, unsigned int baud) {
-    fd = open(port, O_RDWR |O_NOCTTY);
-    if (fd < 0){
+    serialFd = open(port, O_RDWR | O_NOCTTY);
+    if (serialFd < 0){
         return -1;
     }
+
     struct termios SerialPortSettings;
-    tcgetattr(fd, &SerialPortSettings);
+    tcgetattr(serialFd, &SerialPortSettings);
     cfsetispeed(&SerialPortSettings, baud);
     cfsetospeed(&SerialPortSettings, baud);
     SerialPortSettings.c_cflag &= ~PARENB; // clear parity bit
@@ -31,7 +30,7 @@ int SerialInit(char* port, unsigned int baud) {
     SerialPortSettings.c_cflag |= CREAD | CLOCAL;
     SerialPortSettings.c_iflag &= ~(IXON | IXOFF | IXANY);
     SerialPortSettings.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-    tcsetattr(fd, TCSANOW, &SerialPortSettings);
+    tcsetattr(serialFd, TCSANOW, &SerialPortSettings);
 
     return 0;
 }
@@ -45,14 +44,13 @@ int SerialInit(char* port, unsigned int baud) {
 */
 int SerialRecv(unsigned char *buf, unsigned int max_len, unsigned int timeout_ms) {
     struct termios SerialPortSettings;
-    tcgetattr(fd, &SerialPortSettings);
+    tcgetattr(serialFd, &SerialPortSettings);
 
     SerialPortSettings.c_cc[VMIN] = 15; // TODO:: check if this is ok and shouldn't be bigger
     SerialPortSettings.c_cc[VTIME] = timeout_ms * 0.01; // deciseconds
-//    SerialPortSettings.c_cflag |= CREAD | CLOCAL;
-    tcsetattr(fd, TCSANOW, &SerialPortSettings); // config!!
+    tcsetattr(serialFd, TCSANOW, &SerialPortSettings); // config!!
 
-    int bytes_read = read(fd, buf, max_len);
+    int bytes_read = read(serialFd, buf, max_len);
     if (bytes_read < 0) {
         return -1;
     }
@@ -66,7 +64,7 @@ int SerialRecv(unsigned char *buf, unsigned int max_len, unsigned int timeout_ms
  * @return amount of bytes written into buf, -1 on error
  */
 int SerialSend(unsigned char *buf, unsigned int size) {
-    int writeval = write(fd, buf, size);
+    int writeval = write(serialFd, buf, size);
     if (writeval < (int)size) {
         return -1;
     }
@@ -78,7 +76,7 @@ int SerialSend(unsigned char *buf, unsigned int size) {
  * @brief Empties the input buffer.
  */
 void SerialFlushInputBuff(void) {
-    int tf = tcflush(fd, TCIFLUSH);
+    int tf = tcflush(serialFd, TCIFLUSH);
     if (tf < 0) {
         return;
     }
@@ -89,8 +87,5 @@ void SerialFlushInputBuff(void) {
  * @return 0 if succeeded in closing the port and -1 otherwise.
  */
 int SerialDisable(void) {
-    return close(fd);
+    return close(serialFd);
 }
-
-
-
