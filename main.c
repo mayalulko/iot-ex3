@@ -1,181 +1,242 @@
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "serial_io.h"
 #include "config.h"
-#include "time.h"
-#include <unistd.h>
 
-char TX_BUFFER[BUFFER_SIZE] = {0};
-unsigned char RX_BUFFER[BUFFER_SIZE] = {0};
+static char TX_BUFFER[BUFFER_SIZE] = {0};
+static char RX_BUFFER[BUFFER_SIZE] = {0};
 
-unsigned char* AT = "AT";
-unsigned char* AT_CCID = "AT+CCID";
-unsigned char* AT_COPS_ALL = "AT+COPS=?";
-unsigned char* AT_COPS = "AT+COPS?";
-unsigned char* AT_CREG = "AT+CREG?";
-char* PBREADY = "+PBREADY";
-char* OK = "OK";
-char* HAS_CONNECTION = "0,5";
+static const char* OK_END_MSG = "OK_END_MSG";
+enum RETURN_CODE {SUCCESS = 0, ERROR = -1, WARNING = -2};
 
 /**
- *
- * @param command
- * @param commandSize
- * @return
+ * Executes `command` on modem
+ * @param command Command to execute
+ * @param commandLen Command length
+ * @return ERROR if a fatal error has occurred, WARNING if a non fatal error occurred, and number of sent bytes if successful.
  */
-int writeCommand(unsigned char* command, int commandSize);
+static int executeCommand(const char* command, int commandLen);
 
 /**
+ * Reads output from modem until encountering `endMsg` in the output buffer, and printing the output to stdout.
+ * Waits `timeout` milliseconds between each attempt to read, until `maxNumAttempts` has elapsed.
  *
- * @param buf
- * @param bufsize
- * @param timeout
- * @param endMsg
- * @param maxNumAttempts
- * @return
+ * @param buf Input buffer, assumed to be zeroed
+ * @param bufsize Size of input buffer
+ * @param timeout Timeout in millisecond between attempts
+ * @param endMsg string to look for in input buffer, encountering this will cause function to return
+ * @param maxNumAttempts Maximum number of attempts to execute command
+ * @return ERROR if a fatal error has occurred, WARNING if a non fatal error occurred, and number of sent received if successful.
  */
-int readUntil(unsigned char* buf, int bufsize, int timeout, char* endMsg, int maxNumAttempts);
+static int readUntil(char* buf, int bufsize, int timeout, const char* endMsg, int maxNumAttempts);
+
+/**
+ * Executes `executeCommand()` and `readUntil` sequentially, resetting RX_BUFFER after printing output to stdout.
+ */
+static int execSimpleModemCommand(const char* cmd, int timeout);
+
+/**
+ * Executes `AT+CREG?` until modem is notifying it successfully registered to cellular network or until predefined number of attempts has elapsed.
+ */
+static int execAT_CREG(void);
 
 
 int main() {
-/**
- * init
- * wait for pbready (read)
- * AT (write)
- * AT+CCID
- * AT+COPS=?
- * AT+CREG
- * AT+COPS?
- * print the command and response
- * TODO: turn off the echo - this will affect the parsing -don't want that
- */
-    printf("Initializing... \n");
+    printf("1) Initializing serial connection to modem\n");
     int retval = SerialInit(MODEM_PORT, MODEM_BAUD_RATE);
     if (retval < 0) {
-        // TODO:: errmsg
-        return -1;
+        fprintf(stderr, "\tFailed to initialize serial connection, aborting.\n");
+        return ERROR;
     }
-    //printf("%d \n", retval);
-    printf("Connecting...\n");
-    /*
-//    SerialRecv((unsigned char*)RX_BUFFER, BUFFER_SIZE,15000);
-    retval = readUntil(RX_BUFFER, BUFFER_SIZE, 15000, PBREADY, MAX_NUMBER_ATTEMPTS);
+
+    const char* PBREADY = "+PBREADY";
+    printf("2) Connecting to modem, please turn it on. Waiting up to 30 seconds for `%s`\n", PBREADY);
+    retval = readUntil(RX_BUFFER, BUFFER_SIZE, 30000, PBREADY, MAX_NUMBER_ATTEMPTS);
     if (retval < 0) {
+        fprintf(stderr, "\tFailed to connect to modem, aborting.\n");
         SerialDisable();
-        //TODO:: errmsg
-        return -1;
+        return ERROR;
     }
-    printf("Waiting for pbready.\n Received number of bytes: %d \n", retval);
-    memset(RX_BUFFER, 0, sBUFFER_SIZE;
-    */
 
-    //writeCommand("ATE0", 4, RX_BUFFER, BUFFER_SIZE, 500);
-    //memset(RX_BUFFER, 0, sBUFFER_SIZE;
-    /* AT command */
-    printf("sending AT command\n");
-    writeCommand(AT, strlen(AT));
-    printf("Receiving response to AT command\n");
-    readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
-    memset(RX_BUFFER, 0, BUFFER_SIZE);
-
-    /* AT+CCID? command */
-    printf("sending AT+CCID? command\n");
-    writeCommand(AT_CCID, strlen(AT_CCID)); // TODO check that ccid's length is ok
-    printf("Receiving response to AT+CCID? command\n");
-    retval = readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
-    if (retval < 0) {
-        SerialDisable();
-        //TODO:: errmsg
-        return -1;
+    printf("3) Turning off echo mode\n");
+    char* cmd = "ATE0";
+    retval = execSimpleModemCommand(cmd, 500);
+    if (retval == ERROR) {
+        fprintf(stderr, "\tA fatal error has occurred, aborting.\n");
+        return SerialDisable();
+    } else if (retval == WARNING) {
+        fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
     }
-    memset(RX_BUFFER, 0, BUFFER_SIZE);
 
-
-//    writeCommand(AT_CREG, strlen(AT_CREG));
-//    readUntil(RX_BUFFER, BUFFER_SIZE, 500, )
-
-    int connectAttempts = 0;
-    while(connectAttempts < MAX_NUMBER_ATTEMPTS) {
-        printf("sending AT+CREG? command, attempt %d\n", connectAttempts);
-        writeCommand(AT_CREG, strlen(AT_CREG));
-        printf("Receiving response to AT+CREG? command\n");
-        int bytes = readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
-        if ((bytes > 0) && (strstr(RX_BUFFER, HAS_CONNECTION)!=NULL)) {
-            break;
-        }
-        memset(RX_BUFFER, 0, BUFFER_SIZE);
-        ++connectAttempts;
-        if (connectAttempts == MAX_NUMBER_ATTEMPTS) {
-            SerialDisable();
-            return -1;
-        }
-
-        sleep(5);
+    cmd = "AT";
+    printf("3) Sending `%s` command and reading output\n", cmd);
+    retval = execSimpleModemCommand(cmd, 500);
+    if (retval == ERROR) {
+        fprintf(stderr, "\tA fatal error has occurred, aborting.\n");
+        return SerialDisable();
+    } else if (retval == WARNING) {
+        fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
     }
-    memset(RX_BUFFER, 0, BUFFER_SIZE);
 
-    /* AT+COPS? command */
-    printf("sending AT+COPS? command\n");
-    writeCommand(AT_COPS, strlen(AT_COPS));
-    printf("Receiving response to AT+COPS? command\n");
-    readUntil(RX_BUFFER, BUFFER_SIZE, 500, OK, MAX_NUMBER_ATTEMPTS);
-    memset(RX_BUFFER, 0, BUFFER_SIZE);
+    cmd = "AT+CCID?";
+    printf("4) Sending `%s` command and reading output\n", cmd);
+    retval = execSimpleModemCommand(cmd, 500);
+    if (retval == ERROR) {
+        fprintf(stderr, "\tA fatal error has occurred, aborting.\n");
+        return SerialDisable();
+    } else if (retval == WARNING) {
+        fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
+    }
 
-    /* AT+COPS=? command */
-    printf("sending AT+COPS=? command\n");
-    writeCommand(AT_COPS_ALL, strlen(AT_COPS_ALL));
-    printf("Receiving response to AT+COPS=? command\n");
-    readUntil(RX_BUFFER, BUFFER_SIZE, 18e4, OK, MAX_NUMBER_ATTEMPTS);
-    memset(RX_BUFFER, 0, BUFFER_SIZE);
-    printf("yeah!\n");
+    printf("5) Sending `AT+CREG?` command and reading output. "
+           "Repeat this until recognized by a cellular operator with 5 seconds between attempts.\n");
+    retval = execAT_CREG();
+    if (retval == ERROR) {
+        fprintf(stderr, "\tA fatal error has occurred, aborting.\n");
+        return SerialDisable();
+    } else if (retval == WARNING) {
+        fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
+    }
+
+    cmd = "AT+COPS?";
+    printf("6) Sending `%s` command and reading output\n", cmd);
+    retval = execSimpleModemCommand(cmd, 500);
+    if (retval == ERROR) {
+        fprintf(stderr, "\tA fatal error has occurred, aborting.\n");
+        return SerialDisable();
+    } else if (retval == WARNING) {
+        fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
+    }
+
+    cmd = "AT+COPS=?";
+    printf("7) Sending `%s` command and reading output\n", cmd);
+    retval = execSimpleModemCommand(cmd, 180000);
+    if (retval == ERROR) {
+        fprintf(stderr, "\tA fatal error has occurred, aborting.\n");
+        return SerialDisable();
+    } else if (retval == WARNING) {
+        fprintf(stderr, "\tCommand execution of `%s` failed, skipping.\n", cmd);
+    }
 
 
-    int disval = SerialDisable();
-    printf("DISABLE %d \n", disval);
+    printf("8) Closing serial connection to modem\n");
+    return SerialDisable();
 }
 
-int writeCommand(unsigned char* command, int commandSize) {
-    // Write command
-    int commandSize_fmt = commandSize+strlen(ENDL);
-    snprintf(TX_BUFFER,commandSize_fmt+1, "%s%s%c", command, ENDL, '\0');
-    int bytesSent = SerialSend((unsigned char*)TX_BUFFER, commandSize_fmt);
-    printf("sent bytes %d \n", bytesSent);
+int executeCommand(const char* command, int commandLen) {
+    printf("\tExecuting command `%s`\n", command);
+    int commandLenUpdated = commandLen + (int)strlen(ENDL);
+    // Pre-formatting command
+    snprintf(TX_BUFFER, commandLenUpdated + 1, "%s%s%c", command, ENDL, '\0');
+    int bytesSent = SerialSend((unsigned char*)TX_BUFFER, commandLenUpdated);
     TX_BUFFER[0]='\0';
+
+    if (bytesSent < 0) {
+        fprintf(stderr, "Error occurred while sending command to modem\n");
+        return ERROR;
+    }
+
+    printf("\tSuccessfully sent %d bytes to modem\n", bytesSent);
     return bytesSent;
 }
 
-int readUntil(unsigned char* buf, int bufsize, int timeout, char* endMsg, int maxNumAttempts){
-    // Receive answer
+int readUntil(char* buf, int bufsize, int timeout, const char* endMsg, int maxNumAttempts){
+    printf("\tReading data continuously from modem, waiting until `%s` appears in output.\n", endMsg);
+    printf("\t\tMaking %d attempts with %d ms timeout between each attempt.\n", maxNumAttempts, timeout);
 
-    int bytesRecv = 0;
-    int bufferReadSoFar = 0;
-    int attemps = 0;
+    int bytesRecv;
+    int totalBytesRecv = 0;
+    int attempts = 0;
     unsigned char* curLocation = NULL;
-    curLocation = buf;
+    curLocation = (unsigned char*) buf;
 
-    // TODO: timeout proportional to attempts.
-    int found = 0;
-    while ((attemps < maxNumAttempts) && (bufferReadSoFar < bufsize)) {
-        printf("In read. attempt: %d.\n", attemps);
-        bytesRecv = SerialRecv(curLocation, bufsize-bufferReadSoFar, timeout);
-        bufferReadSoFar += bytesRecv;
+    int found = 0;  // If we found endMsg in the rx buffer, we will mark this value with 1.
+    while ((attempts < maxNumAttempts) && (totalBytesRecv < bufsize)) {
+        bytesRecv = SerialRecv(curLocation, bufsize - totalBytesRecv, timeout);
+        if (bytesRecv < 0) {
+            fprintf(stderr, "\tError occurred while reading data from modem, aborting.\n");
+            return ERROR;
+        }
+
+        totalBytesRecv += bytesRecv;
+        printf("\tSuccessfully read %d bytes from modem, combined for a total of %d bytes so far\n", bytesRecv, totalBytesRecv);
         if (strstr(buf, endMsg)!=NULL) {
             found = 1;
             break;
         }
+
+        printf("\tFailed attempt #%d / %d\n", ++attempts, maxNumAttempts);
         curLocation += bytesRecv;
-        attemps++;
     }
-    buf[bufferReadSoFar] = '\0';
-    printf("Received message:\n %s ", buf);
+
+    buf[totalBytesRecv] = '\0';
+    printf("\tReceived message from modem:\n%s\n", buf);
 
     if (!found){
-        return -1;
-        printf("error"); // TODO error msg
+        fprintf(stderr, "\tError, did not encounter `%s` in incoming data.\n", endMsg);
+        return WARNING;
     }
 
+    SerialFlushInputBuff();
+    return totalBytesRecv;
+}
+
+int execSimpleModemCommand(const char* cmd, int timeout) {
+    int bytesSent = executeCommand(cmd, (int)strlen(cmd));
+    if (bytesSent < 0) {
+        fprintf(stderr, "\tAn error occurred while executing command `%s`\n", cmd);
+        return ERROR;
+    }
+
+    int bytesRead = readUntil(RX_BUFFER, BUFFER_SIZE, timeout, OK_END_MSG, MAX_NUMBER_ATTEMPTS);
+    SerialFlushInputBuff();
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
+    if (bytesRead < 0) {
+        fprintf(stderr, "\tAn error occurred while reading the output of command`%s`\n", cmd);
+        return ERROR;
+    }
+
+    return bytesRead;
+}
+
+int execAT_CREG(void) {
+    const char* cmd = "AT+CREG?";
+    const char* HAS_CONNECTION = "0,5";
+    int connectAttempts = 0;
+    int maxAttempts = 10; // Maximum number of attempts for executing AT+CREG? until giving up
+    int bytesRecv = 0;
+    int bytesSend;
+
+    while(connectAttempts < maxAttempts) {
+        bytesSend = executeCommand(cmd, (int)strlen(cmd));
+        if (bytesSend == ERROR) {
+            fprintf(stderr, "\tAn error occurred while executing command `%s`, aborting\n", cmd);
+            break;
+        }
+
+        bytesRecv = readUntil(RX_BUFFER, BUFFER_SIZE, 1000, OK_END_MSG, 1);
+
+        if (bytesRecv == ERROR) {
+            fprintf(stderr, "\tAn error occurred while reading from modem, aborting\n");
+            break;
+        }
+
+        if ((bytesRecv > 0) && (strstr(RX_BUFFER, HAS_CONNECTION)!=NULL)) {
+            printf("\tSuccessfully executed `%s`, and received %d bytes\n", cmd, bytesRecv);
+            break;
+        }
+
+        printf("\tFailed attempt #%d / #%d\n", ++connectAttempts, maxAttempts);
+        if (connectAttempts < maxAttempts) {
+            SerialFlushInputBuff();
+            memset(RX_BUFFER, 0, BUFFER_SIZE);
+            sleep(5);
+        }
+
+    }
 
     SerialFlushInputBuff();
-    printf("Number of bytes read: %d\n", bufferReadSoFar);
-    return bufferReadSoFar;
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
+    return bytesRecv;
 }
