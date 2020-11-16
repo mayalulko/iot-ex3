@@ -7,7 +7,7 @@
 static char TX_BUFFER[BUFFER_SIZE] = {0};
 static char RX_BUFFER[BUFFER_SIZE] = {0};
 
-static const char* OK_END_MSG = "OK_END_MSG";
+static const char* OK_END_MSG = "OK";
 enum RETURN_CODE {SUCCESS = 0, ERROR = -1, WARNING = -2};
 
 /**
@@ -58,7 +58,7 @@ int main() {
         SerialDisable();
         return ERROR;
     }
-
+    memset(RX_BUFFER, 0, BUFFER_SIZE);
     printf("3) Turning off echo mode\n");
     char* cmd = "ATE0";
     retval = execSimpleModemCommand(cmd, 500);
